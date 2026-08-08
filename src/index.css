@@ -965,6 +965,22 @@ button:hover {
   to { transform: rotate(360deg); }
 }
 
+/* Spin utility for inline icons */
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+/* Location button states */
+.location-button.requesting {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.location-button.granted {
+  color: #34c759;
+  border-color: rgba(52, 199, 89, 0.4);
+}
+
 .error-panel {
   max-width: 380px;
   margin: auto;

@@ -10,7 +10,7 @@ import type { BasemapMode } from './MapTerrain';
 import { classifyWeatherCode } from './weatherCode';
 import { useSpring } from 'framer-motion';
 
-const DEFAULT_CITY = 'New York';
+type GeoStatus = 'idle' | 'requesting' | 'granted' | 'denied';
 
 const NAV_CATEGORIES = [
   { key: 'weather', label: 'Weather', icon: '☀️' },
@@ -29,10 +29,10 @@ interface SatelliteStatus {
 }
 
 function App() {
-  const [city, setCity] = useState(DEFAULT_CITY);
+  const [city, setCity] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [realtime, setRealtime] = useState(true);
   const [atmosphereVariable, setAtmosphereVariable] = useState<AtmosphereVariable>('temperature');
@@ -41,6 +41,7 @@ function App() {
   const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number } | null>(null);
   const [mapZoom, setMapZoom] = useState(12);
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle');
   const [basemap, setBasemap] = useState<BasemapMode>('streets');
   const [satelliteStatus, setSatelliteStatus] = useState<SatelliteStatus>({ loading: false, date: null, failed: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -88,17 +89,33 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    loadData(DEFAULT_CITY);
+  const requestGeolocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setGeoStatus('denied');
+      return;
+    }
+    setGeoStatus('requesting');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        setGeoStatus('granted');
+        setUserLocation({ lat, lon });
+        setMapCenter({ lat, lon });
+        loadData(`${lat.toFixed(4)},${lon.toFixed(4)}`);
+      },
+      (err) => {
+        console.log('Geolocation denied:', err.message);
+        setGeoStatus('denied');
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+    );
   }, [loadData]);
 
+  // Auto-request geolocation on first mount
   useEffect(() => {
-    if (!realtime) return;
-    const id = setInterval(() => {
-      loadData(city);
-    }, Math.max(5, pollInterval) * 1000);
-    return () => clearInterval(id);
-  }, [realtime, pollInterval, city, loadData]);
+    requestGeolocation();
+  }, [requestGeolocation]);
 
   const handleLocationDetected = useCallback((lat: number, lon: number) => {
     setUserLocation({ lat, lon });
@@ -110,6 +127,15 @@ function App() {
       return prev;
     });
   }, [loadData]);
+
+  // Realtime polling — only if a city/location is already loaded
+  useEffect(() => {
+    if (!realtime || !city) return;
+    const id = setInterval(() => {
+      loadData(city);
+    }, Math.max(5, pollInterval) * 1000);
+    return () => clearInterval(id);
+  }, [realtime, pollInterval, city, loadData]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -456,29 +482,29 @@ function App() {
           
           {/* My Location Button */}
           <button
-            className="location-button interactive"
+            className={`location-button interactive ${geoStatus === 'requesting' ? 'requesting' : ''} ${geoStatus === 'granted' ? 'granted' : ''}`}
             type="button"
             aria-label="Use my location"
+            title={
+              geoStatus === 'requesting' ? 'Detecting your location…' :
+              geoStatus === 'denied' ? 'Location denied — click to retry' :
+              geoStatus === 'granted' ? 'Jump to my location' :
+              'Use my location'
+            }
             onClick={() => {
-              if (userLocation) {
+              if (geoStatus === 'granted' && userLocation) {
+                // Already have location — just jump to it
                 setMapCenter(userLocation);
                 loadData(`${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}`);
-              } else if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lon = pos.coords.longitude;
-                    setUserLocation({ lat, lon });
-                    setMapCenter({ lat, lon });
-                    loadData(`${lat.toFixed(4)},${lon.toFixed(4)}`);
-                  },
-                  (err) => console.log('Location error:', err),
-                  { enableHighAccuracy: true, timeout: 10000 }
-                );
+              } else {
+                // Request or retry geolocation
+                requestGeolocation();
               }
             }}
           >
-            <Navigation size={20} />
+            {geoStatus === 'requesting'
+              ? <Loader2 size={20} className="spin" />
+              : <Navigation size={20} />}
           </button>
         </div>
 
@@ -552,6 +578,12 @@ function App() {
           </aside>
         </div>
 
+        {geoStatus === 'requesting' && !loading && !weatherData && (
+          <div className="loader-container interactive">
+            <Loader2 className="loader-spinner" />
+            <div>Detecting your location…</div>
+          </div>
+        )}
         {loading ? (
           <div className="loader-container interactive">
             <Loader2 className="loader-spinner" />
@@ -560,7 +592,12 @@ function App() {
         ) : error ? (
           <div className="panel error-panel interactive">
             <div className="row-value danger">{error}</div>
-            <button onClick={() => loadData(DEFAULT_CITY)}>Retry</button>
+            <button onClick={() => requestGeolocation()}>Use my location</button>
+          </div>
+        ) : !weatherData && geoStatus === 'denied' ? (
+          <div className="panel error-panel interactive">
+            <div className="row-value">Location access denied.</div>
+            <div className="row-label" style={{ marginTop: '0.4rem' }}>Search a city above to get started.</div>
           </div>
         ) : null}
 
