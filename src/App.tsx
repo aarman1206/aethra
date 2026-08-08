@@ -51,19 +51,36 @@ function App() {
   const drawerRef = useRef<HTMLDivElement>(null);
   const drawerX = useSpring(0, { damping: 20, stiffness: 200 });
 
-  const loadData = useCallback(async (cityName: string) => {
+  const loadData = useCallback(async (query: string) => {
     setLoading(true);
     setError(null);
     try {
-      const location = await searchCity(cityName);
-      if (location) {
-        setCity(location.name);
-        setMapCenter({ lat: location.latitude, lon: location.longitude });
-        const data = await fetchWeather(location.latitude, location.longitude);
-        setWeatherData(data);
+      let lat: number, lon: number, locationName: string;
+      
+      // Check if query is a coordinate string like "40.7128,-74.0060"
+      const coordMatch = query.match(/^(-?\d+\.\d+),(-?\d+\.\d+)$/);
+      
+      if (coordMatch) {
+        lat = parseFloat(coordMatch[1]);
+        lon = parseFloat(coordMatch[2]);
+        locationName = "My Location";
       } else {
-        setError('Location not found');
+        const location = await searchCity(query);
+        if (location) {
+          lat = location.latitude;
+          lon = location.longitude;
+          locationName = location.name;
+        } else {
+          setError('Location not found');
+          setLoading(false);
+          return;
+        }
       }
+
+      setCity(locationName);
+      setMapCenter({ lat, lon });
+      const data = await fetchWeather(lat, lon);
+      setWeatherData(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unexpected error while loading weather data');
     } finally {
