@@ -1,126 +1,140 @@
-# Aethra — Project Overview
+<div align="center">
+  <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/globe.svg" width="120" height="120" alt="Aethra Logo" />
+  <h1>Aethra</h1>
+  <p><strong>Live Weather & Atmospheric Data Visualization in Stunning 3D</strong></p>
+  
+  <p>
+    <a href="https://reactjs.org/"><img src="https://img.shields.io/badge/React-19-blue.svg?style=flat-square&logo=react" alt="React" /></a>
+    <a href="https://threejs.org/"><img src="https://img.shields.io/badge/Three.js-r184-black.svg?style=flat-square&logo=three.js" alt="Three.js" /></a>
+    <a href="https://docs.pmnd.rs/react-three-fiber"><img src="https://img.shields.io/badge/R3F-v9.6-purple.svg?style=flat-square" alt="React Three Fiber" /></a>
+    <a href="https://vitejs.dev/"><img src="https://img.shields.io/badge/Vite-v8.0-646CFF.svg?style=flat-square&logo=vite" alt="Vite" /></a>
+    <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-3178C6.svg?style=flat-square&logo=typescript" alt="TypeScript" /></a>
+  </p>
+</div>
 
-## What this project does
+<br />
 
-**Aethra** is a real-time 3D weather visualization dashboard. You search a city and it renders:
+**Aethra** is an interactive, real-time 3D weather visualization dashboard. Unlike standard 2D weather apps, Aethra leverages modern web graphics and live scientific data to render accurate, physically-simulated atmospheric phenomena right in your browser. 
 
-- A real satellite/street map centered on that location
-- A live vertical atmosphere "sounding" (temperature/wind/humidity at 5 real altitude levels)
-- Physically-simulated weather phenomena (rain, snow, fog, storms, hail, clouds) that only appear when actually happening, based on real classification codes
-- A data dashboard (current conditions, 7-day forecast, cross-referenced sources)
+Search any city globally to experience an immersive vertical atmosphere "sounding," localized real-time precipitation particles, and a comprehensive data dashboard backed by top-tier meteorological sources.
 
-It's not a toy — every visual element is driven by live API data rather than decoration, and phenomena are gated by the official WMO weather code rather than heuristics.
+---
 
-## Tech stack
+## ✨ Key Features
+
+- **🌍 3D Interactive Globe:** A seamless `Three.js` globe featuring a static Level of Detail (LoD) view that dynamically transitions into localized weather effects based on your search.
+- **⛈️ Authentic Weather Phenomena:** Real-time rendering of rain, snow, fog, storms, and cloud coverage directly driven by the official WMO weather codes. No heuristics—just data.
+- **🛰️ NASA Satellite Integration:** Cross-check live conditions with the latest NASA POWER meteorological data and NASA GIBS satellite imagery.
+- **📊 Vertical Atmospheric Profiling:** Live readings of temperature, wind, and humidity plotted across 5 distinct pressure altitudes (1000 to 300 hPa).
+- **⚡ High-Performance Physics:** Powered by WebAssembly (`@react-three/rapier`) to calculate rigid-body physics like wind-shear forces and bouncing hail.
+
+## 🛠️ Technology Stack
 
 | Layer | Technology |
 |---|---|
-| Build tool | Vite 8 |
-| Language | TypeScript 5.7 (strict) |
-| UI framework | React 19 |
-| 3D rendering | Three.js + `@react-three/fiber` |
-| 3D helpers | `@react-three/drei` (OrbitControls, Text, Line, Stars) |
-| Physics | `@react-three/rapier` (WebAssembly physics engine) |
-| Post-processing | `@react-three/postprocessing` (Bloom) |
-| Icons | `lucide-react` |
-| Linting | ESLint 9 + typescript-eslint (flat config) |
-| Static preview | `serve.py` — a small Python HTTP server for previewing `dist/` after build (dev convenience, unrelated to the app's core stack) |
+| **Build Tool** | Vite 8 |
+| **Language** | TypeScript 5.7 (strict) |
+| **UI Framework** | React 19 |
+| **3D Rendering** | Three.js + `@react-three/fiber` |
+| **3D Helpers** | `@react-three/drei` (OrbitControls, Text, Line, Stars) |
+| **Physics** | `@react-three/rapier` (WebAssembly physics engine) |
+| **Post-Processing** | `@react-three/postprocessing` (Bloom) |
+| **Icons** | `lucide-react` |
 
-No backend — it's a static SPA that calls three external public APIs directly from the browser.
+Aethra is a purely client-side static Single Page Application (SPA). It requires zero backend infrastructure, seamlessly fetching from three distinct external public APIs.
 
-## Entry points
+---
 
-```
-index.html → src/main.tsx → src/App.tsx
-```
+## 🏗️ Architecture & Data Flow
 
-- `index.html` — Vite's HTML shell, mounts `#root`
-- `src/main.tsx` — React root, wraps `<App />` in `StrictMode`
-- `src/App.tsx` — top-level component: owns all UI state (search, realtime polling, basemap mode, atmosphere variable, zoom), fetches weather data, and lays out the dashboard + `<Canvas>`
+`src/api.ts` acts as the single source of truth for all external data. Calls are made in parallel via `Promise.allSettled` to:
+1. **Open-Meteo Current & Daily Forecast** (Weather codes, temps, humidity).
+2. **Open-Meteo Pressure Levels** (NWP model data).
+3. **NASA POWER** (Cross-checking validation).
+4. **Open-Meteo Geocoding** (City names to coordinates).
 
-## Data layer
-
-`src/api.ts` is the single source of truth for external data, fetched in parallel via `Promise.allSettled`:
-
-1. **Open‑Meteo current/daily forecast** — temperature, wind, humidity, pressure, cloud cover, `weather_code` (WMO code), `is_day`
-2. **Open‑Meteo pressure-level API** — real NWP model levels (1000/850/700/500/300 hPa) → `AtmosphericLevel[]`
-3. **NASA POWER** — independent cross-check (temperature/wind/humidity), with sentinel `-999` values filtered out
-4. **Open‑Meteo geocoding** — city name → lat/lon
-
-`src/weatherCode.ts` classifies the raw WMO code into a `PhenomenonCategory` (clear/cloudy/fog/drizzle/rain/freezing-rain/snow/rain-showers/snow-showers/thunderstorm/thunderstorm-hail) — this is the backbone that drives which 3D components render.
-
-## Core module interaction
+### Core Interaction Diagram
 
 ```mermaid
 flowchart TD
-    App["App.tsx (state + UI panels)"]
-    API["api.ts (fetchWeather, searchCity)"]
-    Scene["WeatherScene.tsx"]
-    Code["weatherCode.ts (classify WMO code)"]
+    App["App.tsx\n(State + UI Panels)"]
+    API["api.ts\n(Fetch Engine)"]
+    Scene["Globe.tsx / WeatherScene.tsx\n(3D Canvas)"]
+    Code["weatherCode.ts\n(WMO Classifier)"]
 
-    App -->|calls| API
-    API -->|WeatherData| App
-    App -->|passes weatherData + UI toggles| Scene
+    App -->|Requests Data| API
+    API -->|Returns WeatherData| App
+    App -->|Props & Toggles| Scene
 
-    Scene --> MapTerrain["MapTerrain.tsx (OSM / NASA GIBS tiles)"]
-    Scene --> Atmosphere["AtmosphereProfile.tsx (real altitude levels)"]
-    Scene --> Physics["WeatherPhysicsField.tsx (Rapier, wind-shear)"]
-    Scene --> Wind["WindVectors.tsx"]
-    Scene --> Phenomena["Phenomenon layers"]
-
-    Phenomena --> ClearSky
-    Phenomena --> CloudLayer
-    Phenomena --> FogLayer
-    Phenomena --> RainLayer
-    Phenomena --> SnowLayer
-    Phenomena --> StormCell
-    Phenomena --> HailLayer
-
-    ClearSky -.uses.-> Code
-    CloudLayer -.uses.-> Code
-    FogLayer -.uses.-> Code
-    RainLayer -.uses.-> Code
-    SnowLayer -.uses.-> Code
-    StormCell -.uses.-> Code
-    HailLayer -.uses.-> Code
+    Scene --> Terrain["MapTerrain (OSM/NASA GIBS)"]
+    Scene --> Atmosphere["AtmosphereProfile (Altitudes)"]
+    Scene --> Physics["Rapier Physics / Particles"]
+    
+    Scene -.-> Code
 ```
 
-Key design pattern: **self-gating components**. `WeatherScene.tsx` unconditionally mounts every phenomenon component; each one internally calls `classifyWeatherCode()` and returns `null` if its condition isn't met (e.g., `SnowLayer` only renders for snow codes, `HailLayer` only for codes 96/99). This keeps the scene wiring simple and guarantees mutually-consistent, non-overlapping effects.
+> **Design Pattern Note:** 
+> Components in Aethra are **self-gating**. Instead of massive conditional trees, the scene mounts every phenomenon layer. Each layer internally evaluates the `classifyWeatherCode()` result and returns `null` if its condition isn't met (e.g., `SnowLayer` only renders for snow codes).
 
-## File-by-file map (`src/`)
+---
+
+## 📂 Repository Structure
 
 | File | Role |
 |---|---|
-| `main.tsx` | React root |
-| `App.tsx` | State, data fetching orchestration, dashboard UI |
-| `api.ts` | All external API calls + `WeatherData`/`AtmosphericLevel` types |
-| `weatherCode.ts` | WMO code → phenomenon category classifier |
-| `tileMath.ts` | Shared lon/lat → slippy-map tile math (OSM + NASA GIBS both use it) |
-| `WeatherScene.tsx` | R3F scene composition — lights, camera controls, mounts all sub-components |
-| `MapTerrain.tsx` | Fetches/builds the basemap texture (OpenStreetMap or NASA GIBS satellite), with date-fallback logic for satellite imagery |
-| `AtmosphereProfile.tsx` | Renders the 5 real pressure-level planes + wind arrows + text readouts |
-| `WeatherPhysicsField.tsx` | Rapier air-parcel physics driven by real per-altitude wind (wind shear) |
-| `ClearSky.tsx` | Sun/moon + stars (real `is_day`, clear-sky codes) |
-| `CloudLayer.tsx` | Drifting cloud puffs (real `cloud_cover`) |
-| `FogLayer.tsx` | Real THREE.js scene fog (`fogExp2`), fog codes only |
-| `RainLayer.tsx` | Shader-based falling rain, rain/drizzle/freezing-rain codes |
-| `SnowLayer.tsx` | Shader-based falling snow, snow codes only |
-| `StormCell.tsx` | Anvil-cloud storm shape, thunderstorm codes only |
-| `HailLayer.tsx` | Rapier-physics bouncing hail pellets, hail codes only |
-| `WindVectors.tsx` | Instanced wind-direction arrow field |
-| `ScientificBoundingBox.tsx` | Scene boundary frame/axis labels |
-| `Legend.tsx` | Color-scale legend for the selected atmosphere variable |
-| `index.css` | Design system (panels, toolbar, dashboard grid) |
+| `main.tsx` | React initialization and StrictMode wrapper. |
+| `App.tsx` | Global state, API orchestration, and dashboard UI layout. |
+| `Globe.tsx` | The central 3D globe, containing localized dynamic weather effects and texture loaders. |
+| `api.ts` | External API handlers and strict TypeScript interfaces (`WeatherData`, `AtmosphericLevel`). |
+| `weatherCode.ts` | WMO numerical code to `PhenomenonCategory` mapper. |
+| `MapTerrain.tsx` | Handles basemap texturing (OpenStreetMap or NASA GIBS) with date-fallback logic. |
+| `AtmosphereProfile.tsx` | Renders the 5 real pressure-level planes, complete with wind arrows and readouts. |
+| `Physics & Layers` | Files like `RainLayer.tsx`, `SnowLayer.tsx`, and `HailLayer.tsx` that drive the visual phenomena. |
+| `index.css` | The complete design system for panels, the toolbar, and the dynamic drawer. |
 
-## Config/build files
+---
 
-- `vite.config.ts` — Vite + `@vitejs/plugin-react`
-- `tsconfig.json` / `tsconfig.app.json` / `tsconfig.node.json` — TS project references (app code vs. Vite config)
-- `eslint.config.js` — flat ESLint config (typescript-eslint + react-hooks + react-refresh)
-- `serve.py` — optional static server for the production `dist/` build (LAN-accessible)
+## 🚀 Getting Started
 
-## Notable honesty/limits baked into the code
+### Prerequisites
+- Node.js (v18.18.0 or higher)
+- npm or yarn
 
-- Real data throughout, but explicitly **not** a full NWP/CFD simulation — it uses 5 standard pressure levels (not a full reanalysis grid) and simplified rigid-body physics (not fluid dynamics).
-- NASA GIBS satellite imagery is a daily composite (not live), with automatic multi-day fallback and an on-screen date label.
-- NASA POWER is shown purely as a cross-check panel, separate from the primary Open‑Meteo data.
+### Installation
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/aethra.git
+
+# Navigate into the project
+cd aethra
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
+```
+
+### Building for Production
+```bash
+# Build the optimized static bundle
+npm run build
+
+# Preview the production build locally
+npm run preview
+```
+
+---
+
+## ⚖️ Scientific Constraints & Transparency
+
+Aethra is designed to be highly accurate, but it operates within browser limitations:
+- **Simplified Simulation**: It utilizes 5 standard pressure levels instead of a full continuous reanalysis grid, applying rigid-body physics in place of full computational fluid dynamics (CFD).
+- **Satellite Data**: NASA GIBS satellite imagery uses a daily composite, with intelligent fallback logic to the most recent viable date.
+- **Data Segregation**: NASA POWER data is strictly presented in its own cross-check panel, separate from the primary Open-Meteo pipeline.
+
+<br/>
+
+<div align="center">
+  <sub>Built with ❤️ using React and Three.js. Data provided by <a href="https://open-meteo.com/">Open-Meteo</a> and <a href="https://power.larc.nasa.gov/">NASA POWER</a>.</sub>
+</div>
