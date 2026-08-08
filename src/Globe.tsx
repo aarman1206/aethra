@@ -140,11 +140,13 @@ export default function Globe({
 
   // Animate clouds rotation
   useFrame((state) => {
-    if (cloudsRef.current) {
-      cloudsRef.current.rotation.y += 0.00003;
-    }
-    if (atmosphereRef.current) {
-      atmosphereRef.current.rotation.y += 0.00001;
+    if (!weatherData) {
+      if (cloudsRef.current) {
+        cloudsRef.current.rotation.y += 0.00003;
+      }
+      if (atmosphereRef.current) {
+        atmosphereRef.current.rotation.y += 0.00001;
+      }
     }
     
     // Pulse marker
@@ -302,6 +304,15 @@ export default function Globe({
         <primitive key={index} object={pin} />
       ))}
 
+      {/* Localized Weather Effects */}
+      {weatherData && (
+        <LocalWeatherEffect 
+          weatherCode={weatherData.current.weather_code} 
+          lat={targetLat} 
+          lon={targetLon} 
+        />
+      )}
+
       {/* Lighting - Sun position based on time of day */}
       <ambientLight intensity={0.4} />
       <directionalLight 
@@ -353,6 +364,108 @@ export default function Globe({
         zoomSpeed={1.2}
         rotateSpeed={0.8}
       />
+    </group>
+  );
+}
+
+function LocalWeatherEffect({ weatherCode, lat, lon }: { weatherCode: number, lat: number, lon: number }) {
+  const pointsRef = useRef<THREE.Points>(null);
+  
+  const isRain = (weatherCode >= 51 && weatherCode <= 67) || (weatherCode >= 80 && weatherCode <= 82) || (weatherCode >= 95 && weatherCode <= 99);
+  const isSnow = (weatherCode >= 71 && weatherCode <= 77) || (weatherCode >= 85 && weatherCode <= 86);
+  const isCloud = weatherCode >= 1 && weatherCode <= 48;
+  
+  const particleCount = isRain ? 300 : (isSnow ? 200 : (isCloud ? 50 : 0));
+  
+  const [positions, setPositions] = useState<Float32Array>(new Float32Array());
+  const [velocities, setVelocities] = useState<Float32Array>(new Float32Array());
+  
+  useEffect(() => {
+    if (particleCount === 0) {
+      setPositions(new Float32Array());
+      return;
+    }
+    
+    const pos = new Float32Array(particleCount * 3);
+    const vel = new Float32Array(particleCount * 3);
+    
+    for (let i = 0; i < particleCount; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 4; 
+      pos[i * 3 + 1] = Math.random() * 4;     
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 4; 
+      
+      vel[i * 3] = (Math.random() - 0.5) * 0.01;
+      vel[i * 3 + 1] = isRain ? -0.15 - Math.random() * 0.1 : (isSnow ? -0.03 - Math.random() * 0.03 : 0);
+      vel[i * 3 + 2] = (Math.random() - 0.5) * 0.01;
+    }
+    
+    setPositions(pos);
+    setVelocities(vel);
+  }, [particleCount, isRain, isSnow]);
+  
+  useFrame(() => {
+    if (!pointsRef.current || positions.length === 0) return;
+    const posAttribute = pointsRef.current.geometry.attributes.position;
+    const posArray = posAttribute.array as Float32Array;
+    
+    for (let i = 0; i < particleCount; i++) {
+      posArray[i * 3] += velocities[i * 3];
+      posArray[i * 3 + 1] += velocities[i * 3 + 1];
+      posArray[i * 3 + 2] += velocities[i * 3 + 2];
+      
+      if (posArray[i * 3 + 1] < 0) {
+        posArray[i * 3 + 1] = 4;
+        posArray[i * 3] = (Math.random() - 0.5) * 4;
+        posArray[i * 3 + 2] = (Math.random() - 0.5) * 4;
+      }
+      
+      if (isCloud && !isRain && !isSnow) {
+         posArray[i * 3] += 0.002;
+         if (posArray[i * 3] > 2) posArray[i * 3] = -2;
+      }
+    }
+    
+    posAttribute.needsUpdate = true;
+  });
+  
+  const groupRef = useRef<THREE.Group>(null);
+  const position = useMemo(() => latLonToVector3(lat, lon, EARTH_RADIUS * 1.01), [lat, lon]);
+  
+  useFrame(() => {
+    if (groupRef.current) {
+      groupRef.current.position.copy(position);
+      groupRef.current.lookAt(0, 0, 0); 
+      groupRef.current.rotateX(Math.PI / 2); 
+    }
+  });
+
+  if (particleCount === 0 || positions.length === 0) return null;
+
+  const color = isRain ? '#66aaff' : (isSnow ? '#ffffff' : '#cccccc');
+  const size = isRain ? 0.08 : (isSnow ? 0.12 : 0.6);
+  const opacity = isCloud && !isRain && !isSnow ? 0.3 : 0.8;
+  
+  return (
+    <group ref={groupRef}>
+      <points ref={pointsRef}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            count={positions.length / 3}
+            array={positions}
+            itemSize={3}
+          />
+        </bufferGeometry>
+        <pointsMaterial
+          size={size}
+          color={color}
+          transparent={true}
+          opacity={opacity}
+          sizeAttenuation={true}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </points>
     </group>
   );
 }
