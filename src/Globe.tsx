@@ -80,8 +80,7 @@ export default function Globe({
       },
       (error) => {
         console.log('Geolocation denied or unavailable:', error.message);
-        // Default to New York
-        setUserLocation({ lat: 40.7128, lon: -74.0060 });
+        // No default location — user must search a city
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
     );
@@ -156,13 +155,13 @@ export default function Globe({
     }
   });
 
-  // Current location to focus on
-  const targetLat = mapCenter?.lat ?? weatherData?.latitude ?? userLocation?.lat ?? 40.7128;
-  const targetLon = mapCenter?.lon ?? weatherData?.longitude ?? userLocation?.lon ?? -74.0060;
+  // Current location to focus on (null if nothing is known yet)
+  const targetLat = mapCenter?.lat ?? weatherData?.latitude ?? userLocation?.lat ?? null;
+  const targetLon = mapCenter?.lon ?? weatherData?.longitude ?? userLocation?.lon ?? null;
 
   // Create weather pins for forecast locations
   const weatherPins = useMemo(() => {
-    if (!weatherData) return null;
+    if (!weatherData || targetLat === null || targetLon === null) return null;
     
     const pins: THREE.Mesh[] = [];
     const pinGeometry = new THREE.ConeGeometry(0.15, 0.6, 8);
@@ -274,30 +273,32 @@ export default function Globe({
         />
       </mesh>
 
-      {/* Location marker on globe */}
-      <group>
-        <mesh 
-          ref={markerRef}
-          position={latLonToVector3(targetLat, targetLon, EARTH_RADIUS * 1.03)}
-        >
-          <sphereGeometry args={[0.4, 16, 16]} />
-          <meshBasicMaterial 
-            color={weatherData ? getWeatherColor(weatherData.current.weather_code) : '#00e5ff'}
-            toneMapped={false}
-          />
-        </mesh>
-        
-        {/* Vertical line from surface to marker */}
-        <mesh position={latLonToVector3(targetLat, targetLon, EARTH_RADIUS * 1.015)}>
-          <cylinderGeometry args={[0.03, 0.03, EARTH_RADIUS * 0.03, 8]} />
-          <meshBasicMaterial 
-            color={weatherData ? getWeatherColor(weatherData.current.weather_code) : '#00e5ff'}
-            transparent={true}
-            opacity={0.6}
-            toneMapped={false}
-          />
-        </mesh>
-      </group>
+      {/* Location marker on globe — only when a location is known */}
+      {targetLat !== null && targetLon !== null && (
+        <group>
+          <mesh 
+            ref={markerRef}
+            position={latLonToVector3(targetLat, targetLon, EARTH_RADIUS * 1.03)}
+          >
+            <sphereGeometry args={[0.4, 16, 16]} />
+            <meshBasicMaterial 
+              color={weatherData ? getWeatherColor(weatherData.current.weather_code) : '#00e5ff'}
+              toneMapped={false}
+            />
+          </mesh>
+          
+          {/* Vertical line from surface to marker */}
+          <mesh position={latLonToVector3(targetLat, targetLon, EARTH_RADIUS * 1.015)}>
+            <cylinderGeometry args={[0.03, 0.03, EARTH_RADIUS * 0.03, 8]} />
+            <meshBasicMaterial 
+              color={weatherData ? getWeatherColor(weatherData.current.weather_code) : '#00e5ff'}
+              transparent={true}
+              opacity={0.6}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
+      )}
 
       {/* Weather pins for forecast */}
       {weatherPins && weatherPins.map((pin, index) => (
@@ -305,7 +306,7 @@ export default function Globe({
       ))}
 
       {/* Localized Weather Effects */}
-      {weatherData && (
+      {weatherData && targetLat !== null && targetLon !== null && (
         <LocalWeatherEffect 
           weatherCode={weatherData.current.weather_code} 
           lat={targetLat} 
@@ -352,7 +353,7 @@ export default function Globe({
         enablePan={true}
         enableZoom={true}
         enableRotate={true}
-        target={latLonToVector3(targetLat, targetLon, 0).toArray()}
+        target={targetLat !== null && targetLon !== null ? latLonToVector3(targetLat, targetLon, 0).toArray() : [0, 0, 0]}
         minDistance={EARTH_RADIUS * 1.15}
         maxDistance={EARTH_RADIUS * 8}
         minPolarAngle={0}
