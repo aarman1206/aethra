@@ -1,6 +1,6 @@
-import { useCallback, useEffect, Suspense, useState, useRef } from 'react';
+import { useCallback, useEffect, Suspense, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Search, Loader2, Menu, Navigation } from 'lucide-react';
+import { Search, Loader2, Menu } from 'lucide-react';
 import WeatherScene from './WeatherScene';
 import Legend from './Legend';
 import { fetchWeather, searchCity } from './api';
@@ -8,18 +8,17 @@ import type { WeatherData } from './api';
 import type { AtmosphereVariable } from './AtmosphereProfile';
 import type { BasemapMode } from './MapTerrain';
 import { classifyWeatherCode } from './weatherCode';
-import { useSpring } from 'framer-motion';
 
 const DEFAULT_CITY = 'New York';
 
 const NAV_CATEGORIES = [
-  { key: 'weather', label: 'Weather', icon: '☀️' },
-  { key: 'atmosphere', label: 'Atmosphere', icon: '🌡️' },
-  { key: 'forecast', label: 'Forecast', icon: '📅' },
-  { key: 'layers', label: 'Layers', icon: '🗺️' },
-  { key: 'physics', label: 'Physics', icon: '⚛️' },
-  { key: 'nasa', label: 'NASA Data', icon: '🚀' },
-  { key: 'settings', label: 'Settings', icon: '⚙️' },
+  { key: 'weather', label: 'Weather' },
+  { key: 'atmosphere', label: 'Atmosphere' },
+  { key: 'forecast', label: 'Forecast' },
+  { key: 'layers', label: 'Layers' },
+  { key: 'physics', label: 'Physics' },
+  { key: 'nasa', label: 'NASA Data' },
+  { key: 'settings', label: 'Settings' },
 ] as const;
 
 interface SatelliteStatus {
@@ -38,18 +37,13 @@ function App() {
   const [atmosphereVariable, setAtmosphereVariable] = useState<AtmosphereVariable>('temperature');
   const [pollInterval, setPollInterval] = useState<number>(60);
   const [showAtmosphere, setShowAtmosphere] = useState(true);
-  const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number } | null>(null);
   const [mapZoom, setMapZoom] = useState(12);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number } | null>(null);
   const [basemap, setBasemap] = useState<BasemapMode>('streets');
   const [satelliteStatus, setSatelliteStatus] = useState<SatelliteStatus>({ loading: false, date: null, failed: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeCategory, setActiveCategory] = useState<(typeof NAV_CATEGORIES)[number]['key']>('weather');
-
-  // For gesture-based drawer - use spring for fluid animation
-  const drawerRef = useRef<HTMLDivElement>(null);
-  const drawerX = useSpring(0, { damping: 20, stiffness: 200 });
 
   const loadData = useCallback(async (cityName: string) => {
     setLoading(true);
@@ -82,17 +76,6 @@ function App() {
     }, Math.max(5, pollInterval) * 1000);
     return () => clearInterval(id);
   }, [realtime, pollInterval, city, loadData]);
-
-  const handleLocationDetected = useCallback((lat: number, lon: number) => {
-    setUserLocation({ lat, lon });
-    setMapCenter((prev) => {
-      if (!prev) {
-        loadData(`${lat.toFixed(4)},${lon.toFixed(4)}`);
-        return { lat, lon };
-      }
-      return prev;
-    });
-  }, [loadData]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -322,74 +305,6 @@ function App() {
     }
   };
 
-  // Handle touch gestures for drawer
-  useEffect(() => {
-    if (!drawerRef.current) return;
-    
-    const element = drawerRef.current;
-    let startX = 0;
-    let isDragging = false;
-    
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      startX = e.touches[0].clientX;
-      isDragging = true;
-      e.preventDefault();
-    };
-    
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isDragging || e.touches.length !== 1) return;
-      
-      const currentX = e.touches[0].clientX;
-      const diffX = currentX - startX;
-      
-      // Only allow opening from left edge
-      if (diffX > 0 && !drawerOpen) {
-        // Prevent scrolling when dragging
-        e.preventDefault();
-        const translateX = Math.min(diffX, element.clientWidth);
-        drawerX.set(translateX);
-      }
-    };
-    
-    const handleTouchEnd = () => {
-      if (!isDragging) return;
-      isDragging = false;
-      
-      // Determine if we should open or close based on position
-      const currentX = drawerX.get();
-      const shouldOpen = currentX > element.clientWidth / 2;
-      setDrawerOpen(shouldOpen);
-      
-      if (shouldOpen) {
-        drawerX.set(element.clientWidth);
-      } else {
-        drawerX.set(0);
-      }
-    };
-    
-    element.addEventListener('touchstart', handleTouchStart, { passive: false });
-    element.addEventListener('touchmove', handleTouchMove, { passive: false });
-    element.addEventListener('touchend', handleTouchEnd, { passive: false });
-    
-    return () => {
-      element.removeEventListener('touchstart', handleTouchStart);
-      element.removeEventListener('touchmove', handleTouchMove);
-      element.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [drawerX, drawerOpen]);
-
-  // Sync drawer spring with drawerOpen state
-  useEffect(() => {
-    if (drawerRef.current) {
-      if (drawerOpen) {
-        drawerX.set(drawerRef.current.clientWidth);
-      } else {
-        drawerX.set(0);
-      }
-    }
-  }, [drawerOpen, drawerX]);
-
   return (
     <>
       <div className="canvas-container">
@@ -400,9 +315,9 @@ function App() {
               atmosphereVariable={atmosphereVariable}
               showAtmosphere={showAtmosphere}
               mapCenter={mapCenter}
+              mapZoom={mapZoom}
               basemap={basemap}
               onSatelliteStatusChange={setSatelliteStatus}
-              onLocationDetected={handleLocationDetected}
             />
           </Suspense>
         </Canvas>
@@ -415,7 +330,7 @@ function App() {
               className="menu-button interactive"
               type="button"
               aria-label="Open navigation drawer"
-              onClick={() => setDrawerOpen(!drawerOpen)}
+              onClick={() => setDrawerOpen(true)}
             >
               <Menu size={20} />
             </button>
@@ -436,56 +351,10 @@ function App() {
               <Search size={16} />
             </button>
           </form>
-          
-          {/* My Location Button */}
-          <button
-            className="location-button interactive"
-            type="button"
-            aria-label="Use my location"
-            onClick={() => {
-              if (userLocation) {
-                setMapCenter(userLocation);
-                loadData(`${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}`);
-              } else if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lon = pos.coords.longitude;
-                    setUserLocation({ lat, lon });
-                    setMapCenter({ lat, lon });
-                    loadData(`${lat.toFixed(4)},${lon.toFixed(4)}`);
-                  },
-                  (err) => console.log('Location error:', err),
-                  { enableHighAccuracy: true, timeout: 10000 }
-                );
-              }
-            }}
-          >
-            <Navigation size={20} />
-          </button>
         </div>
 
         <div className="workspace">
-          {/* Gesture area for drawer - invisible but captures touches from left edge */}
-          <div 
-            className="drawer-gesture-area" 
-            onTouchStart={(e) => {
-              if (e.touches[0].clientX < 50) {
-                e.stopPropagation();
-              }
-            }}
-          />
-          
-          <div 
-            className={`drawer-backdrop ${drawerOpen ? 'visible' : ''}`} 
-            onClick={() => setDrawerOpen(false)}
-          />
-          
-          <aside 
-            ref={drawerRef}
-            className={`nav-panel interactive ${drawerOpen ? 'open' : ''} ${sidebarCollapsed ? 'collapsed' : ''} apple-drawer`}
-            style={{ transform: `translateX(${drawerX}px)` }}
-          >
+          <aside className={`nav-panel interactive ${drawerOpen ? 'open' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}>
             <div className="nav-panel-header">
               <div>
                 <div className="nav-title">Navigation</div>
@@ -516,13 +385,12 @@ function App() {
                 <button
                   key={category.key}
                   type="button"
-                  className={`nav-tab ${activeCategory === category.key ? 'active' : ''} apple-nav-tab`}
+                  className={`nav-tab ${activeCategory === category.key ? 'active' : ''}`}
                   onClick={() => {
                     setActiveCategory(category.key);
                     setDrawerOpen(false);
                   }}
                 >
-                  <span style={{ fontSize: '1.1rem', marginRight: '0.5rem' }}>{category.icon}</span>
                   {category.label}
                 </button>
               ))}
@@ -534,6 +402,8 @@ function App() {
             </div>
           </aside>
         </div>
+
+        {drawerOpen && <div className="drawer-backdrop interactive" onClick={() => setDrawerOpen(false)} />}
 
         {loading ? (
           <div className="loader-container interactive">
